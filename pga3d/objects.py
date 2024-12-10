@@ -3,9 +3,7 @@ The API for handling geometry.
 """
 
 import math
-
-
-from ._algebra import (
+from .algebra import (
     geometric_product,
     regressive_product,
     outer_product,
@@ -87,8 +85,6 @@ class Algebra:
 
 
 # %% Geometric objects in 3D space
-
-
 class Point(Algebra):
     def __init__(self, x=0, y=0, z=0):
         self._value = x, y, z
@@ -115,7 +111,6 @@ class Point(Algebra):
         z, y, x, w = value[11:15]
         return Point(x / w, y / w, z / w)
 
-
 class Direction(Algebra):
     # This is an "ideal point". Ideal means infinite or in infinity. Not-ideal is called Eucledian.
     # todo: this is really a Point with w = 0, use the same class?
@@ -130,7 +125,6 @@ class Direction(Algebra):
     def value(self):
         x, y, z = self._value
         return (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, z, y, x, 0, 0)
-
 
 class Line(Algebra):
 
@@ -162,7 +156,6 @@ class Line(Algebra):
 
 
 class Plane(Algebra):
-
     # todo: describe when it's an ideal line
 
     def __repr__(self):
@@ -198,8 +191,6 @@ class Plane(Algebra):
 
 
 # %% Transformations
-
-
 class Transform(Algebra):
     # Maybe call this Motor, as the Math people do?
 

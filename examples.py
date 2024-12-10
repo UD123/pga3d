@@ -1,6 +1,5 @@
 import math
-
-from pga3 import Point, Line, Plane, Translator, Rotor
+from pga3d import Point, Line, Plane, Translator, Rotor
 
 
 # Define 3 points
