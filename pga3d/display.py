@@ -129,7 +129,7 @@ class Frame:
         X       = cMo.dot(self.x_frame[0])
 
         if self.h_text is None:
-            self.h_text = ax.text(X[0], X[1]-10, X[2]+20, str(self.id), color=clr)
+            self.h_text = ax.text(X[0,0], X[1,0]-10, X[2,0]+20, str(self.id), color=clr)
         else:
             self.h_text.set_x(X[0,0])
             self.h_text.set_y( X[1,0]-10)
@@ -391,17 +391,17 @@ class PGA3D_DISPLAY:
         h_data      = ax.scatter(x,y,z, marker='.',label='Data Points')
         #ax          = plt.gca()
 
-        # plot tracker positions
-        h_pose      = []
-        for k in range(object_num):
-            h,  = ax.plot([0], [0],[0],marker='x',color='C'+str(k))
-            h_pose.append(h)
+        # # plot tracker positions
+        # h_pose      = []
+        # for k in range(object_num):
+        #     h,  = ax.plot([0], [0],[0],marker='x',color='C'+str(k))
+        #     h_pose.append(h)
 
-        # plot tracker names
-        h_text      = []
-        for k in range(object_num):
-            h  = ax.text(0 , 0, 0, str(k), fontsize=8)
-            h_text.append(h)
+        # # plot tracker names
+        # h_text      = []
+        # for k in range(object_num):
+        #     h  = ax.text(0 , 0, 0, str(k), fontsize=8)
+        #     h_text.append(h)
 
         
         plt.title('3D Objects')
@@ -416,8 +416,8 @@ class PGA3D_DISPLAY:
         plt.show()
         
         self.h_data = h_data        
-        self.h_pose = h_pose        
-        self.h_text = h_text
+        # self.h_pose = h_pose        
+        # self.h_text = h_text
 
         self.fig    = fig
         self.plt    = plt
@@ -427,8 +427,8 @@ class PGA3D_DISPLAY:
         #print('Scene rendering is done')
 
         # for debug
-        logger.info('Press any button to continue...')
-        self.plt.waitforbuttonpress()        
+        #logger.info('Press any button to continue...')
+        #self.plt.waitforbuttonpress()        
         return ax
 
     def scale_scene(self, ax):
@@ -485,7 +485,10 @@ class PGA3D_DISPLAY:
 
         self.min_values = min_values
         self.max_values = max_values
-        #self.ScaleScene(ax)
+        self.scale_scene(ax)
+
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()  
         
         return object_list #min_values.ravel(), max_values.ravel()    
     
@@ -545,19 +548,22 @@ class test_pga3d_display(unittest.TestCase):
         # create board positions
         b1                  = np.array([0.0,   0.0,   0.0,  0.0,  0.0, -0.0 ]).reshape(1,6)
         b2                  = np.array([0.0,   0.0,   10.0,  0.0,  0.0, -90.0 ]).reshape(1,6)    
-        b3                  = np.array([0.0,   0.0,   0.0,  0.0,  45.0, 0.0 ]).reshape(1,6) 
+        b3                  = np.array([0.0,   10.0,   0.0,  0.0,  45.0, 0.0 ]).reshape(1,6) 
         extrinsics_board    = np.vstack((b1,b2,b3))
       
         # import argparse
         board_list          = []
         for k in range(extrinsics_board.shape[0]):
-            h_board = Box3D()
+            h_board         = Box3D()
             h_board.set_extrinsics(extrinsics_board[k,:])
             board_list.append(h_board)
         
 
         patternCentric      = False
         d.draw_objects(ax, board_list, patternCentric)
+
+  
+
         d.finish()
         #self.assertEqual(isOk, True)
       
