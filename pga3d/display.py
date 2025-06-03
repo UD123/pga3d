@@ -14,7 +14,7 @@ Usage / Install :
 
 '''
 
-import math as np
+import numpy as np
 import unittest
 import matplotlib.pyplot as plt
 from matplotlib import cm
@@ -26,17 +26,83 @@ from mpl_toolkits.mplot3d import Axes3D
 import logging 
 logger         = logging.getLogger("pga3d")
 
+#%% Help functions
+def inverse_homogeneoux_matrix(M):
+    R = M[0:3, 0:3]
+    T = M[0:3, 3]
+    M_inv = np.identity(4)
+    M_inv[0:3, 0:3] = R.T
+    M_inv[0:3, 3] = -(R.T).dot(T)
+    return M_inv
+
+def euler_angles_to_rotation_matrix(theta, isdegree=True) :
+    "transfers xyz euler representation to 3D rot matrix"
+    if isdegree:
+        theta = np.deg2rad(theta)
+    if len(theta) != 3:
+        raise ValueError("Input must be a 3-element vector representing Euler angles in radians.")
+
+
+    R_x = np.array([[1,         0,                  0                   ],
+                    [0,         np.cos(theta[0]), -np.sin(theta[0]) ],
+                    [0,         np.sin(theta[0]), np.cos(theta[0])  ]
+                    ])
+
+    R_y = np.array([[np.cos(theta[1]),    0,      np.sin(theta[1])  ],
+                    [0,                     1,      0                   ],
+                    [-np.sin(theta[1]),   0,      np.cos(theta[1])  ]
+                    ])
+
+    R_z = np.array([[np.cos(theta[2]),    -np.sin(theta[2]),    0],
+                    [np.sin(theta[2]),    np.cos(theta[2]),     0],
+                    [0,                     0,                      1]
+                    ])
+
+    R = np.dot(R_z, np.dot( R_y, R_x ))
+
+    return R
+
+def compute_transform_matrix(extrinsics, patternCentric):
+    "transformation to 4D matrix"            
+    R           = euler_angles_to_rotation_matrix(extrinsics[3:6]) 
+    H           = np.eye(4,4)
+    H[0:3,0:3]  = R
+    H[0:3,3]    = extrinsics[0:3]
+    H          = inverse_homogeneoux_matrix(H) if patternCentric else H
+    return H  
+
+def transform_to_matplotlib_frame(cMo, X, inverse=False):
+    M = np.identity(4)
+    M[1,1] = 0
+    M[1,2] = 1
+    M[2,1] = -1
+    M[2,2] = 0
+
+    if inverse:
+        return M.dot(inverse_homogeneoux_matrix(cMo).dot(X))
+    else:
+        return M.dot(cMo.dot(X))
+    
+
+
+#%% Objects
 # 3d Axis frame
 class Frame:
     def __init__(self, fname = 'frame'):
         self.name               = fname  # H,W,Depth
+        self.id                 = 0      # several objects of the same type  
         self.extrisincs         = np.zeros((0,6))
         self.params_model       = {'width':10, 'height':10,'depth':10}
         self.x_frame            = self.create_frame_model(20)
-        self.h_frame            = [None]*len(self.x_frame) # assocoation to graphocs   
+        self.h_frame            = [None]*len(self.x_frame) # assocoation to graphics   
         self.h_text             = None
-        self.draw_axis          = True
-        
+        self.h_model            = [None]*len(self.x_frame) # assocoation to graphics
+        self.show_axis          = True
+        self.show_text          = True
+        self.color              = 'C0' # default color
+        self.min_values         = np.tile(np.inf,3)
+        self.max_values         = np.tile(-np.inf,3)
+
     def create_frame_model(self, height = 10):
         # create frame axis
         X_frame1        = np.ones((4,2))
@@ -52,6 +118,100 @@ class Frame:
         X_frame3[0:3,1] = [0, 0, height]
         
         return [X_frame1, X_frame2, X_frame3]  
+    
+    def draw_text(self, ax, cMo):
+        "draws text in the given axis"
+        if self.show_text is False:
+            return
+        
+        clr     = self.color 
+        # transform to the first coordinate
+        X       = cMo.dot(self.x_frame[0])
+
+        if self.h_text is None:
+            self.h_text = ax.text(X[0], X[1]-10, X[2]+20, str(self.id), color=clr)
+        else:
+            self.h_text.set_x(X[0,0])
+            self.h_text.set_y( X[1,0]-10)
+            self.h_text.set_3d_properties(X[2,0]+20)   
+
+    def update_min_max(self, X): 
+        "updates min and max values"
+        if X is None:
+            return
+        
+        self.min_values = np.minimum(self.min_values, X.min(1))
+        self.max_values = np.maximum(self.max_values, X.max(1))   
+
+    def draw_axis(self, ax, cMo):
+        "attach axis to the frame"
+        if self.show_axis is False:
+            return
+                    
+        part_num     = len(self.x_frame)
+        clr          = 'rgb'
+        for i in range(part_num):
+            # transform
+            X       = cMo.dot(self.x_frame[i])
+            
+            if self.h_frame[i] is None:
+                self.h_frame[i],  = ax.plot3D(X[0,:], X[1,:], X[2,:], color=clr[i])
+            else:
+                self.h_frame[i].set_data(X[0,:], X[1,:])  
+                self.h_frame[i].set_3d_properties(X[2,:])
+            
+            self.update_min_max(X[0:3,:])
+
+        return 
+
+    def draw_model(self, ax, cMo):
+        "draws model when defined"
+        if self.x_model[0] is None:
+            return
+        
+        x_moving    = self.x_model
+        clr         = self.color
+        part_num     = len(x_moving)
+        for i in range(part_num):
+            # transform
+            X       = cMo.dot(x_moving[i])
+            
+            # draw
+            if self.h_model[i] is None:
+                self.h_model[i],  = ax.plot3D(X[0,:], X[1,:], X[2,:], color=clr)
+            else:
+                self.h_model[i].set_data(X[0,:], X[1,:])
+                self.h_model[i].set_3d_properties(X[2,:])
+
+            self.update_min_max(X[0:3,:])
+
+        return    
+
+    def draw_all(self, ax, patternCentric = False):
+        "draws the frame in the given axis"
+        extrinsics          = self.extrinsics
+        
+        # compute transform
+        cMo                 = compute_transform_matrix(extrinsics, patternCentric)
+
+        # show model
+        self.draw_model(ax, cMo)      
+                
+        # show text
+        self.draw_text(ax, cMo)
+                
+        # show axis
+        self.draw_axis(ax, cMo)
+
+        return 
+    
+    def set_extrinsics(self, extrinsics):
+        "set extrinsics for the frame"
+        if extrinsics is None:
+            self.extrinsics = np.zeros((0,6))
+        else:
+            self.extrinsics = extrinsics
+
 
 class Box3D(Frame):
     def __init__(self, size = (200,500,300)):
@@ -176,52 +336,6 @@ class Point(Frame):
         return outv
 
 
-#%% Help functions
-def inverse_homogeneoux_matrix(M):
-    R = M[0:3, 0:3]
-    T = M[0:3, 3]
-    M_inv = np.identity(4)
-    M_inv[0:3, 0:3] = R.T
-    M_inv[0:3, 3] = -(R.T).dot(T)
-    return M_inv
-
-def eulerAnglesToRotationMatrix(theta) :
-
-    R_x = np.array([[1,         0,                  0                   ],
-                    [0,         np.cos(theta[0]), -np.sin(theta[0]) ],
-                    [0,         np.sin(theta[0]), np.cos(theta[0])  ]
-                    ])
-
-    R_y = np.array([[np.cos(theta[1]),    0,      np.sin(theta[1])  ],
-                    [0,                     1,      0                   ],
-                    [-np.sin(theta[1]),   0,      np.cos(theta[1])  ]
-                    ])
-
-    R_z = np.array([[np.cos(theta[2]),    -np.sin(theta[2]),    0],
-                    [np.sin(theta[2]),    np.cos(theta[2]),     0],
-                    [0,                     0,                      1]
-                    ])
-
-    R = np.dot(R_z, np.dot( R_y, R_x ))
-
-    return R
-
-def fromEulerToRotMatrix(euler_angles_degrees):
-    "transfers xyz euler representation to 3D rot matrix"
-    euler_angles_radians = euler_angles_degrees/180*np.pi
-    rotation_mat         = eulerAnglesToRotationMatrix(euler_angles_radians.ravel())
-    return rotation_mat
-
-def computeTransformMatrix(extrinsics, patternCentric):
-    "transformation to 4D matrix"            
-    R           = fromEulerToRotMatrix(extrinsics[3:6]) 
-    H           = np.eye(4,4)
-    H[0:3,0:3] = R
-    H[0:3,3]   = extrinsics[0:3]
-    H         = inverse_homogeneoux_matrix(H) if patternCentric else H
-    return H  
-
-
 # --------------------------------
 #%% Main
 class PGA3D_DISPLAY:
@@ -238,8 +352,6 @@ class PGA3D_DISPLAY:
         self.h_text     = None
 
         # graphics
-        self.fig                = None
-        self.ax                 = None
         self.min_values         = np.array([0,0,0]) # min axis range
         self.max_values         = np.array([1,1,1]) # max axis range
         
@@ -248,19 +360,19 @@ class PGA3D_DISPLAY:
 
         logger.debug(f'Created')
       
-    def init_show(self): 
+    def init_scene(self): 
         # 3D scene
 
-        fig_num     = 1
-        object_num  = 1
+        fig_num                 = 1
+        object_num              = 1
         self.min_values         = np.array([0,0,0]) # min axis range
         self.max_values         = np.array([1,1,1]) # max axis range
         
-        self.object_list = []        
+        self.object_list        = []        
 
 
         # init figure
-        fig         = plt.figure(fig_num)
+        fig                     = plt.figure(fig_num)
         plt.clf() 
         plt.ion()    
         #fig.tight_layout()  
@@ -275,26 +387,27 @@ class PGA3D_DISPLAY:
         ax.set_proj_type('ortho')        
 
         # Plot data points for handler
-        h_data,     = plt.scatter([0, 1], [0, 1], [0, 1], 'b.')
+        x,y,z       = np.array([0, 1]), np.array([0, 1]), np.array([0, 1])
+        h_data      = ax.scatter(x,y,z, marker='.',label='Data Points')
         #ax          = plt.gca()
 
         # plot tracker positions
         h_pose      = []
         for k in range(object_num):
-            h,  = ax.plot([0], [0],marker='x',color='C'+str(k))
+            h,  = ax.plot([0], [0],[0],marker='x',color='C'+str(k))
             h_pose.append(h)
 
         # plot tracker names
         h_text      = []
         for k in range(object_num):
-            h  = ax.text(0 , 0, str(k), fontsize=8)
+            h  = ax.text(0 , 0, 0, str(k), fontsize=8)
             h_text.append(h)
 
         
         plt.title('3D Objects')
-        plt.xlabel('X1')
-        plt.ylabel('X2')
-        plt.zlabel('X2')
+        ax.set_xlabel('X1')
+        ax.set_ylabel('X2')
+        ax.set_zlabel('X3')
 
         self.scale_scene(ax)
 
@@ -311,7 +424,7 @@ class PGA3D_DISPLAY:
         self.ax     = ax
 
 
-        print('Scene rendering is done')
+        #print('Scene rendering is done')
 
         # for debug
         logger.info('Press any button to continue...')
@@ -348,89 +461,30 @@ class PGA3D_DISPLAY:
         #set_axes_equal(ax) # IMPORTANT - this is also required
         #ax.axis('equal')   
 
-      
-        # 
     def draw_objects(self, ax, object_list, patternCentric = False):
         # check
-        
-        min_val     = np.inf
-        max_val     = -np.inf
-        min_values  = np.tile(min_val,3)
-        max_values  = np.tile(max_val,3)
+
+        min_values  = self.min_values
+        max_values  = self.max_values
         
         object_num  = len(object_list)
         if object_num < 1:
-            return min_values, max_values
+            return []
     
-        cm_subsection   = np.linspace(0.0, 1.0, object_num)
+        #cm_subsection   = np.linspace(0.0, 1.0, object_num)
         #colors          = [ cm.rainbow(x) for x in cm_subsection ]
-        colors          = [ cm.Pastel1(x) for x in cm_subsection ]
+        #colors          = [ cm.Pastel1(x) for x in cm_subsection ]
         #rotSequence     = 'xyz' Paired
 
         for k in range(object_num):
             
             # get params
-            extrinsics  = object_list[k].extrinsics
-            x_moving    = object_list[k].x_model
-            x_frame     = object_list[k].x_frame
-            draw_axis   = object_list[k].draw_axis
-            name_model  = object_list[k].name
-            
-            # compute transform
-            cMo         = computeTransformMatrix(extrinsics, patternCentric)
+            object_list[k].draw_all(ax, patternCentric)
+            min_values          = np.minimum(min_values, object_list[k].min_values)
+            max_values          = np.maximum(max_values, object_list[k].max_values)
 
-            # colors    
-            clr          = colors[k]
-            clr         = [0.5, 0.5, 0.5] if name_model == 'ray' else clr     
-            
-            oneTime      = name_model != 'ray'
-            part_num     = len(x_moving)
-            for i in range(part_num):
-                # transform
-                X       = cMo.dot(x_moving[i])
-                
-                # draw
-                if object_list[k].h_model[i] is None:
-                    object_list[k].h_model[i],  = ax.plot3D(X[0,:], X[1,:], X[2,:], color=clr)
-                else:
-                    object_list[k].h_model[i].set_data(X[0,:], X[1,:])
-                    object_list[k].h_model[i].set_3d_properties(X[2,:])
-                    
-                # show text
-                if oneTime:
-                    oneTime = False
-                    if object_list[k].h_text is None:
-                        object_list[k].h_text = ax.text(X[0,0], X[1,0]-10, X[2,0]+20, str(k), color=colors[k])
-                    else:
-                        object_list[k].h_text.set_x(X[0,0])
-                        object_list[k].h_text.set_y( X[1,0]-10)
-                        object_list[k].h_text.set_3d_properties(X[2,0]+20)
-                    
-                    
-                min_values = np.minimum(min_values, X[0:3,:].min(1))
-                max_values = np.maximum(max_values, X[0:3,:].max(1))
-                
-            if draw_axis is False:
-                continue
-                        
-            part_num     = len(x_frame)
-            clr          = 'rgb'
-            for i in range(part_num):
-                # transform
-                X       = cMo.dot(x_frame[i])
-                
-                if object_list[k].h_frame[i] is None:
-                    object_list[k].h_frame[i],  = ax.plot3D(X[0,:], X[1,:], X[2,:], color=clr[i])
-                else:
-                    object_list[k].h_frame[i].set_data(X[0,:], X[1,:])  
-                    object_list[k].h_frame[i].set_3d_properties(X[2,:])
-                
-                min_values = np.minimum(min_values, X[0:3,:].min(1))
-                max_values = np.maximum(max_values, X[0:3,:].max(1))
-    
         self.min_values = min_values
         self.max_values = max_values
-        
         #self.ScaleScene(ax)
         
         return object_list #min_values.ravel(), max_values.ravel()    
@@ -445,7 +499,7 @@ class PGA3D_DISPLAY:
         
         objects_list_found = [x for x in object_list if x.name == obj_name]
         if len(objects_list_found) < obj_num:
-            self.Print('No object %s with number %s is found' %(obj_name,obj_num))
+            logger.info('No object %s with number %s is found' %(obj_name,obj_num))
             return
         
         # objects are always 1,2,3
@@ -461,110 +515,6 @@ class PGA3D_DISPLAY:
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()       
     
-    def draw_data(self, dataList):
-        "assuming that everythong is initialized - show data"
-        if dataList is None:
-            return
-
-        self.h_data.set_data(dataList[0, :], dataList[1, :])
-
-    def draw_track(self, trackList):
-        "assuming that everythong is initialized - show track info"
-        if trackList is None:
-            return
-
-        object_num       = self.params["TrackNum"]  
-        ct              = np.linspace(0, 2 * np.pi, 100)
-        circle          = np.vstack((np.cos(ct), np.sin(ct)))
-        small_shift     = 3e-2
-
-        # plot tracker positions
-        for k in range(object_num):
-
-            # do not show init stages
-            if trackList[k].state < TrackState.LAST_INIT:
-               continue
-            
-            ypred, Spred, yhist     = trackList[k].get_show_info()
-            
-            u, s, v                 = np.linalg.svd(Spred)
-            elipse                  = u @ np.diag(np.sqrt(s)) @ circle            
-            
-            # update drawing
-            self.h_pose[k].set_data(ypred[0], ypred[1]) 
-            self.h_text[k].set_x(ypred[0] + small_shift)
-            self.h_text[k].set_y(ypred[1]) 
-            #self.h_text[k].set_text('%d-%d' %(trackList[k].id,trackList[k].state)) 
-            self.h_text[k].set_text('%d-%d' %(trackList[k].id,trackList[k].life_time)) 
-            self.h_circle[k].set_data(elipse[0,:] + ypred[0], elipse[1,:] + ypred[1]) 
-            self.h_history[k].set_data(yhist[0,:], yhist[1,:])  
-
-
-    def show_info(self, trackList = None, dataList = None):
-        "displays tracks and data"
-
-        self.draw_data(dataList)
-        self.draw_track(trackList)
-
-        #self.fig.canvas.draw()
-        #self.fig.canvas.flush_events() 
-
-        self.plt.draw()
-        self.plt.pause(0.1)
-
-        # for debug
-        #logger.info('Press any button to continue...')
-        #self.plt.waitforbuttonpress()
-
-
-    def show_tracks_and_data(self, trackList, dataList, par = None):
-        """
-        Visualizes the data points and tracks.
-
-        Args:
-            trackList: List of track objects.
-            dataList: 2D array containing measurement data (time x measurements).
-            Par: Dictionary containing parameters.
-            
-        """
-        par         = self.params if par is None else par
-
-        ShowFigNum  = 1
-        #AxisSc      = [par["Y1Bounds"][0], par["Y2Bounds"][0], par["Y1Bounds"][1], par["Y2Bounds"][1]]
-        SmallShift  = 5e-3
-        NumSigma    = np.sqrt(par["GateLevel"])
-
-        # Plot data points
-        plt.figure(ShowFigNum)
-        plt.plot(dataList[0, :], dataList[1, :], 'b.')
-        #plt.axis(AxisSc)
-        plt.title('Data Points & Tracks')
-        plt.xlabel('X1')
-        plt.ylabel('X2')
-        ax = plt.gca()
-        ax.set_xlim([par["Y1Bounds"][0], par["Y1Bounds"][1]])
-        ax.set_ylim([par["Y2Bounds"][0], par["Y2Bounds"][1]])
-        
-        # Plot tracks
-        TrackNum            = len(trackList)
-
-        for i in range(TrackNum):
-
-            y, S    = trackList[i].predict()
-            u, s, v = np.linalg.svd(S)
-            elipse  = u @ np.diag(np.sqrt(s)) @ np.vstack((np.cos(np.linspace(0, 2 * np.pi, 100)), np.sin(np.linspace(0, 2 * np.pi, 100))))
-
-            # do not show certain states
-            #if not any(trackList[i]["State"] == s for s in ValidStatesForShow):
-            #    y = np.array([[np.nan], [np.nan]])
-
-            plt.plot(elipse[0, :] + y[0], elipse[1, :] + y[1], 'r')
-            plt.text(y[0] + SmallShift, y[1], str(i), fontsize=8)
-
-        plt.draw()
-        plt.pause(0.1)  # Update the plot
-        #plt.clf()       
- 
     def finish(self):
         # Close everything
         #plt.show()
@@ -578,32 +528,37 @@ class PGA3D_DISPLAY:
 
 # --------------------------------
 #%% Tests
-class TestPGA3D_DISPLAY(unittest.TestCase):
+class test_pga3d_display(unittest.TestCase):
 
     def test_create(self):
         "check create and data show init"
-        d       = PGA3D_DISPLAY()
-        ax      = d.init_show()
+        d               = PGA3D_DISPLAY()
+        ax              = d.init_scene()
         d.finish()
         self.assertFalse(ax is None) 
 
     def test_show_board(self):
         cfg                 = None
-        d                   = PGA3D_DISPLAY(cfg)
+        d                   = PGA3D_DISPLAY()
         ax                  = d.init_scene()
 
+        # create board positions
         b1                  = np.array([0.0,   0.0,   0.0,  0.0,  0.0, -0.0 ]).reshape(1,6)
         b2                  = np.array([0.0,   0.0,   10.0,  0.0,  0.0, -90.0 ]).reshape(1,6)    
         b3                  = np.array([0.0,   0.0,   0.0,  0.0,  45.0, 0.0 ]).reshape(1,6) 
         extrinsics_board    = np.vstack((b1,b2,b3))
       
-        #import argparse
-        board_list          = d.GetBoardParams(extrinsics_board)
+        # import argparse
+        board_list          = []
+        for k in range(extrinsics_board.shape[0]):
+            h_board = Box3D()
+            h_board.set_extrinsics(extrinsics_board[k,:])
+            board_list.append(h_board)
         
 
         patternCentric      = False
         d.draw_objects(ax, board_list, patternCentric)
-        d.Finish()
+        d.finish()
         #self.assertEqual(isOk, True)
       
 
@@ -612,11 +567,9 @@ class TestPGA3D_DISPLAY(unittest.TestCase):
 def RunTest():
     #unittest.main()
     suite = unittest.TestSuite()
-    #suite.addTest(TestPGA3D_DISPLAY("test_create")) # ok
-    suite.addTest(TestPGA3D_DISPLAY("test_show_board")) 
+    #suite.addTest(test_pga3d_display("test_create")) # ok
+    suite.addTest(test_pga3d_display("test_show_board")) 
 
-    
-    
     runner = unittest.TextTestRunner()
     runner.run(suite)
 
