@@ -139,9 +139,22 @@ shared helpers: `project`, `bivector_exp`, `inject`, `dot`, `tr`,
 
 ### Citation / upstream
 
-* Chris Doran, *SimpleGA.jl* — https://github.com/ChrisDoran/SimpleGA.jl
+* Chris Doran, *SimpleGA.jl* — https://github.com/MonumoLtd/SimpleGA.jl
+* Upstream documentation — https://monumoltd.github.io/SimpleGA.jl/dev/
 * Doran & Lasenby, *Geometric Algebra for Physicists*, Cambridge
   University Press, 2003.
+
+### Documentation
+
+A Python-side documentation set adapted from the upstream Julia docs
+lives under [doc/simplega/](doc/simplega):
+
+* [Overview](doc/simplega/overview.md) — installation, first example,
+  the Even / Odd trick.
+* [API reference](doc/simplega/api.md) — bases, arithmetic, projection,
+  exponentiation, helpers.
+* [Algebras](doc/simplega/algebras.md) — per-algebra notes for
+  `GA(2,0)`, `GA(3,0)`, `GA(3,1)`, and quaternions.
 
 ### Usage
 
