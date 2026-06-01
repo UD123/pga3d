@@ -18,7 +18,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from pga3d import Point, Line, Plane, Translator, Rotor  # noqa: E402
-from pga3d_display import (  # noqa: E402
+from pga3d.pga3d_display import (  # noqa: E402
     plot_points,
     plot_lines,
     plot_plane,

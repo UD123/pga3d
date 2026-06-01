@@ -1,13 +1,22 @@
 
 import math
+import os
+import sys
+
 import pytest
-from pga3d import Point, Line, Plane, Translator, Rotor
 import numpy as np
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import matplotlib.pyplot as plt
-# test_examples.py
 
-import matplotlib.pyplot as plt
+# Allow running this file directly as a script
+# (python pga3d/pga3d_display.py) by making the repo root importable.
+if __package__ in (None, ""):
+    sys.path.insert(
+        0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    from pga3d import Point, Line, Plane, Translator, Rotor
+else:
+    from . import Point, Line, Plane, Translator, Rotor
 
 def test_point_creation():
     p = Point(1, 2, 3)

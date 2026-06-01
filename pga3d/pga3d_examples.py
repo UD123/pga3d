@@ -1,5 +1,16 @@
 import math
-from pga3d import Point, Line, Plane, Translator, Rotor
+import os
+import sys
+
+# Allow running this file directly as a script (python pga3d/pga3d_examples.py)
+# by making the repo root importable.
+if __package__ in (None, ""):
+    sys.path.insert(
+        0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    from pga3d import Point, Line, Plane, Translator, Rotor
+else:
+    from . import Point, Line, Plane, Translator, Rotor
 
 
 # Define 3 points
@@ -16,7 +27,7 @@ line3 = Line.from_points(p3, p1)
 # A plane going through these points
 plane1 = Plane.from_points(p1, p2, p3)
 
-# Define a rotation and rotation
+# Define a translation and rotation
 t = Translator.from_xyz(3, 0, 0)
 r = Rotor.from_angle_and_line(math.pi / 2, Line.from_xyz(0, 0, 1))
 
