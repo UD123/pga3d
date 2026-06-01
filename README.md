@@ -7,12 +7,13 @@ independent so that the underlying representations (multivector layout,
 basis ordering, sign conventions) can be studied in isolation and then
 contrasted against the others.
 
-The collection currently contains two implementations:
+The collection currently contains three implementations:
 
 | Section | Module | Algebra | Underlying representation |
 | --- | --- | --- | --- |
 | [PGA3D](#pga3d) | [pga3d/](pga3d) | 3-D Projective Geometric Algebra `R(3, 0, 1)` | 16-component multivector |
 | [SimpleGA](#simplega) | [simplega/](simplega) | `GA(2,0)`, `GA(3,0)`, `GA(3,1)`, quaternions | grade-split (Even / Odd) blocks |
+| [Ganja](#ganja) | [ganja/](ganja) | generic `Algebra(p, q, r)` | dense 2^n component multivector |
 
 All figures in this README are generated from code in [doc/](doc); see
 the "Regenerating the figures" subsection of each section to reproduce
@@ -235,3 +236,125 @@ python simplega/ga30_visualization.py
 python simplega/quaternion_visualization.py
 python simplega/bivector_visualization.py
 ```
+
+---
+
+## Ganja
+
+`ganja` is an original Python reimplementation inspired by the API of
+[ganja.js](https://github.com/enkimute/ganja.js) by Steven De Keninck.
+It provides a generic `Algebra(p, q, r)` factory that produces a full
+Clifford / geometric algebra of any signature, with a single dense
+`Multivector` type covering every grade.
+
+The implementation is intentionally small (a few hundred lines) and is
+not a line-by-line port of the JavaScript source. It is written from
+first principles around a precomputed basis-blade sign table.
+
+### Citation / upstream
+
+* Steven De Keninck, *ganja.js* — https://github.com/enkimute/ganja.js
+* Interactive PGA tutorial — https://observablehq.com/@enkimute/understanding-pga-1
+* Bivector community / cheat sheets — https://bivector.net
+
+### Usage
+
+```python
+import math
+from ganja import Algebra, graph
+
+# 3-D projective geometric algebra: signature (3, 0, 1)
+PGA3 = Algebra(3, 0, 1)
+e1, e2, e3, e0 = PGA3.basis_vectors()      # e0 squares to 0
+
+# Build a rotor as exp of a bivector and apply it via the sandwich product
+B = (math.pi / 4) * (e1 ^ e2)              # 90° generator in the e1-e2 plane
+R = B.exp()                                # rotor (unit norm)
+rotated = R @ e1                           # equivalent to R * e1 * ~R
+
+# A PGA point at (1, 2, 3): a trivector mixing e1e2e3 with the e0 blades
+P = (e1 ^ e2 ^ e3) + 1*(e0 ^ e2 ^ e3) - 2*(e0 ^ e1 ^ e3) + 3*(e0 ^ e1 ^ e2)
+
+# A PGA plane:  x + y + z = 1
+plane = e1 + e2 + e3 - e0
+
+# Render points / lines / planes side by side
+ax = graph([P, "P(1,2,3)", "tab:red", plane, "plane", "tab:green",
+            e2 ^ e3, "x-axis"],
+           title="PGA(3,0,1) demo", lim=2.5, show=True)
+```
+
+Operator cheat sheet:
+
+| Operator | Meaning |
+| --- | --- |
+| `a * b` | geometric product |
+| `a ^ b` | outer (wedge) product |
+| `a | b` | symmetric inner product |
+| `~a` | reverse |
+| `R @ a` | sandwich product `R a ~R` |
+| `a.dual()` / `a.undual()` | duality (PGA-aware) |
+| `a.exp()` | exponential (closed form for pure bivectors) |
+| `a.grade(k)` | projection onto grade `k` |
+
+### Examples — `graph()` rendering
+
+The figures below are produced by [doc/generate_ganja_figures.py](doc/generate_ganja_figures.py).
+
+| | |
+| --- | --- |
+| ![PGA(3,0,1) demo](doc/ganja_pga3_demo.png) | ![PGA(2,0,1) demo](doc/ganja_pga2_demo.png) |
+| A point, a plane, and a line in 3-D PGA. | Two points and a line in 2-D PGA. |
+
+### Regenerating the figures
+
+```
+python doc/generate_ganja_figures.py
+```
+
+### Status
+
+The core algebra (arithmetic, projection, reverse, dual, exp, sandwich)
+is complete and validated against PGA identities. The `graph()`
+function currently supports 2-D and 3-D PGA; other signatures are
+accepted by the algebra layer but cannot yet be drawn.
+
+---
+
+## Ganja — visualization gallery
+
+A broader showcase of the `graph()` renderer, exercising every supported
+object kind in both 2-D and 3-D PGA. The scenes are produced by
+[ganja/visualization_test.py](ganja/visualization_test.py), which can be
+run interactively or in headless mode:
+
+```
+python ganja/visualization_test.py            # opens matplotlib windows
+python ganja/visualization_test.py --save     # writes PNGs to doc/
+```
+
+The script is adapted from the conventions of
+[ganja.js](https://github.com/enkimute/ganja.js) by Steven De Keninck —
+in particular the `Algebra.graph([...])` mixed-item rendering style
+(multivectors interleaved with labels, colours, polylines, and
+callables). The underlying algebra and renderer in this repository are
+original Python code; only the *API style* of the test scenes follows
+ganja.js.
+
+| | |
+| --- | --- |
+| ![PGA(3,0,1) basics](doc/ganja_test_pga3_basics.png) | ![PGA(3,0,1) rotor](doc/ganja_test_pga3_rotor.png) |
+| Three Euclidean points, the x-axis line, and the plane `x + y + z = 1` in 3-D PGA. | Rotor sandwich `R · P · ~R` rotating a point 90° about the z-axis, with a gray reference arc. |
+| ![PGA(3,0,1) translator](doc/ganja_test_pga3_translator.png) | ![PGA(3,0,1) meet](doc/ganja_test_pga3_meet.png) |
+| Translator sandwich `T · L · ~T` shifting the x-axis line by `(0, 1, 0)`. | Meet of the x-axis line and the plane `x = 1` yields the point `(1, 0, 0)` via `line ∧ plane`. |
+| ![PGA(2,0,1) basics](doc/ganja_test_pga2_basics.png) | ![PGA(2,0,1) polyline](doc/ganja_test_pga2_polyline.png) |
+| Two 2-D points `A`, `B`, their joining line `A ∨ B`, and an independent line `x + y = 1`. | A numpy polyline (Archimedean spiral) mixed with PGA points in a single `graph()` call. |
+
+### Source / attribution
+
+* Test scenes inspired by the `Algebra.graph([...])` examples in
+  [enkimute/ganja.js](https://github.com/enkimute/ganja.js)
+  (MIT, © Steven De Keninck).
+* PGA modelling conventions follow the
+  [bivector.net cheat sheets](https://bivector.net) and the
+  [PGA tutorial notebook](https://observablehq.com/@enkimute/understanding-pga-1).
