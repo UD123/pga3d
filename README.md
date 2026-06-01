@@ -39,3 +39,23 @@ here are some resources that I found useful. Prepare for your mind being blown:
 * PGA explained for devs: https://observablehq.com/@enkimute/understanding-pga-1
 * Geometric algebra in JS, with interactive demos: https://github.com/enkimute/ganja.js
 * C++ implementation of 3D PGA: https://github.com/jeremyong/Klein
+
+
+### Example figures
+
+The figures below are produced by [doc/generate_figures.py](doc/generate_figures.py),
+which drives the plotting helpers in [pga3d_display.py](pga3d_display.py).
+Regenerate them with:
+
+```
+python doc/generate_figures.py
+```
+
+| | |
+| --- | --- |
+| ![Single point](doc/fig_point.png) | ![Line from two points](doc/fig_line.png) |
+| A single `Point(1, 2, 3)`. | A `Line` joining two points. |
+| ![Plane from three points](doc/fig_plane.png) | ![Triangle scene](doc/fig_scene.png) |
+| A `Plane` built from three points. | Points, lines, and a plane together. |
+| ![Translation and rotation](doc/fig_transformations.png) | ![Projection onto a line](doc/fig_projection.png) |
+| A point, its translation, and a composed translation+rotation. | Projecting a point onto a line, with the supporting plane. |
